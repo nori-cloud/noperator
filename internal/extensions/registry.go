@@ -53,7 +53,7 @@ type Registry struct {
 // Load reads and parses the extension registry ConfigMap. It fails closed:
 // a missing ConfigMap, missing data key, or absent/empty "core" entry returns
 // an error.
-func Load(ctx context.Context, c client.Client, namespace, name string) (*Registry, error) {
+func Load(ctx context.Context, c client.Reader, namespace, name string) (*Registry, error) {
 	cm := &corev1.ConfigMap{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, cm); err != nil {
 		return nil, fmt.Errorf("load extension registry: %w", err)

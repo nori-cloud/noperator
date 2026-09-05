@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  schedule:
-    - cron: '0 0 * * *'
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -33,7 +34,6 @@ jobs:
         id: version
         run: |
           echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-          echo "date_tag=$(date -u +%Y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
           echo "chart_version=0.0.$(date -u +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
@@ -51,7 +51,6 @@ jobs:
           tags: |
             type=sha,format=long
             type=raw,value=latest
-            type=raw,value=${{ steps.version.outputs.date_tag }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6

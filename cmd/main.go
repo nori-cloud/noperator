@@ -189,8 +189,9 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	// The extension registry is a liveness-level dependency: a missing or
-	// invalid registry is fatal.
-	registry, err := extensions.Load(ctx, mgr.GetClient(), registryNamespace, registryName)
+	// invalid registry is fatal. Use the uncached reader: the manager cache is
+	// not started yet at this point.
+	registry, err := extensions.Load(ctx, mgr.GetAPIReader(), registryNamespace, registryName)
 	if err != nil {
 		setupLog.Error(err, "Failed to load extension registry", "namespace", registryNamespace, "name", registryName)
 		os.Exit(1)
