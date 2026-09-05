@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -55,6 +57,17 @@ const (
 
 	// ReasonUnknownExtension indicates an extension name not in the registry.
 	ReasonUnknownExtension = "UnknownExtension"
+
+	// EventReasonCreated is emitted when a child resource is first created.
+	EventReasonCreated = "Created"
+
+	// EventReasonSynced is emitted when a child resource is reconciled to
+	// its desired state (whether updated or already up to date).
+	EventReasonSynced = "Synced"
+
+	// EventReasonDeleted is emitted when a child resource is deleted during
+	// tenant finalization.
+	EventReasonDeleted = "Deleted"
 )
 
 // TenantReconciler reconciles a Tenant object.
@@ -69,6 +82,14 @@ type TenantReconciler struct {
 	// ArgoCDNamespace is where AppProject/ApplicationSet/repo-credential
 	// resources are written.
 	ArgoCDNamespace string
+
+	// Recorder emits Kubernetes Events describing the resources the controller
+	// creates, syncs, and deletes for a tenant.
+	Recorder record.EventRecorder
+
+	// RequeueInterval is how often to re-reconcile a tenant to keep its
+	// resources in sync and emit heartbeat "Synced" events.
+	RequeueInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=noperator.nori-cloud.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
@@ -80,6 +101,7 @@ type TenantReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile moves a Tenant towards its desired state by rendering and applying
 // the derived Argo CD resources, and cleans them up on deletion.
@@ -122,15 +144,26 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	for _, obj := range objects {
-		if err := r.apply(ctx, obj); err != nil {
+		created, err := r.apply(ctx, obj)
+		if err != nil {
 			log.Error(err, "Failed to apply resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 			r.setStatus(ctx, tenant, metav1.ConditionFalse, ReasonReconcileError, err.Error())
 			return ctrl.Result{}, err
 		}
+
+		kind := obj.GetObjectKind().GroupVersionKind().Kind
+		name := obj.GetName()
+		if created {
+			log.Info("Created resource", "kind", kind, "name", name, "tenant", tenant.Name)
+			r.emitEvent(tenant, EventReasonCreated, "Created %s %s", kind, name)
+		} else {
+			log.Info("Synced resource", "kind", kind, "name", name, "tenant", tenant.Name)
+			r.emitEvent(tenant, EventReasonSynced, "Synced %s %s", kind, name)
+		}
 	}
 
 	r.setStatus(ctx, tenant, metav1.ConditionTrue, ReasonReconciled, "Reconciled")
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 }
 
 func (r *TenantReconciler) renderer() *renderer.Renderer {
@@ -142,33 +175,45 @@ func (r *TenantReconciler) renderer() *renderer.Renderer {
 }
 
 // apply creates the object if absent, updates it otherwise, and leaves
-// namespaces untouched once created (they are effectively immutable).
-func (r *TenantReconciler) apply(ctx context.Context, obj client.Object) error {
+// namespaces untouched once created (they are effectively immutable). It
+// returns true when the object was newly created.
+func (r *TenantReconciler) apply(ctx context.Context, obj client.Object) (bool, error) {
 	existing := obj.DeepCopyObject().(client.Object)
 	err := r.Get(ctx, client.ObjectKeyFromObject(obj), existing)
 	if apierrors.IsNotFound(err) {
-		return r.Create(ctx, obj)
+		return true, r.Create(ctx, obj)
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	if obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" {
-		return nil
+		return false, nil
 	}
 	obj.SetResourceVersion(existing.GetResourceVersion())
-	return r.Update(ctx, obj)
+	return false, r.Update(ctx, obj)
+}
+
+// emitEvent records an event on the tenant for an activity the controller
+// performed. Recording failures are non-fatal and only logged.
+func (r *TenantReconciler) emitEvent(tenant *noperatorv1alpha1.Tenant, reason, messageFormat string, args ...any) {
+	if r.Recorder == nil {
+		return
+	}
+	r.Recorder.Event(tenant, corev1.EventTypeNormal, reason, fmt.Sprintf(messageFormat, args...))
 }
 
 // finalize removes the Argo CD resources and tenant namespaces. The namespaces
 // sit in Terminating until Argo CD prunes the workloads inside them.
 func (r *TenantReconciler) finalize(ctx context.Context, tenant *noperatorv1alpha1.Tenant) error {
-	if err := r.Delete(ctx, newArgocdObject("AppProject", tenant.Name)); err != nil && !apierrors.IsNotFound(err) {
+	log := logf.FromContext(ctx)
+
+	if err := r.deleteResource(ctx, tenant, newArgocdObject("AppProject", tenant.Name)); err != nil {
 		return err
 	}
 
 	for _, env := range tenant.Spec.Environments {
 		name := fmt.Sprintf("%s-%s", tenant.Name, env)
-		if err := r.Delete(ctx, newArgocdObject("ApplicationSet", name)); err != nil && !apierrors.IsNotFound(err) {
+		if err := r.deleteResource(ctx, tenant, newArgocdObject("ApplicationSet", name)); err != nil {
 			return err
 		}
 	}
@@ -181,18 +226,36 @@ func (r *TenantReconciler) finalize(ctx context.Context, tenant *noperatorv1alph
 			Name:      fmt.Sprintf("%s-repo-%d", tenant.Name, i),
 			Namespace: r.ArgoCDNamespace,
 		}}
-		if err := r.Delete(ctx, secret); err != nil && !apierrors.IsNotFound(err) {
+		if err := r.deleteResource(ctx, tenant, secret); err != nil {
 			return err
 		}
 	}
 
 	for _, env := range tenant.Spec.Environments {
 		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: renderer.NamespaceName(tenant.Name, env)}}
-		if err := r.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
+		if err := r.deleteResource(ctx, tenant, ns); err != nil {
 			return err
 		}
 	}
 
+	log.Info("Deleted tenant resources", "tenant", tenant.Name)
+	return nil
+}
+
+// deleteResource deletes the given object and records a "Deleted" event and log
+// entry when it was actually removed. Already-absent resources are ignored.
+func (r *TenantReconciler) deleteResource(ctx context.Context, tenant *noperatorv1alpha1.Tenant, obj client.Object) error {
+	if err := r.Delete(ctx, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	kind := obj.GetObjectKind().GroupVersionKind().Kind
+	name := obj.GetName()
+	logf.FromContext(ctx).Info("Deleted resource", "kind", kind, "name", name, "tenant", tenant.Name)
+	r.emitEvent(tenant, EventReasonDeleted, "Deleted %s %s", kind, name)
 	return nil
 }
 

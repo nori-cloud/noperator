@@ -85,6 +85,7 @@ spec:
         {{- end }}
         - --health-probe-bind-address=:8081
         - --registry-name={{ include "noperator.resourceName" (dict "suffix" "extension-registry" "context" $) }}
+        - --requeue-interval={{ .Values.manager.requeueInterval | default "5m" }}
         {{- range .Values.manager.args }}
         - {{ . }}
         {{- end }}

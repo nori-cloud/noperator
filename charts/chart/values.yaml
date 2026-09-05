@@ -27,6 +27,11 @@ manager:
   args:
     - --leader-elect
 
+  ## How often to re-reconcile each tenant to keep its resources in sync and
+  ## emit heartbeat "Synced" events (e.g. 30s, 5m, 1h).
+  ##
+  requeueInterval: "5m"
+
   ## Environment variables
   ##
   env:
