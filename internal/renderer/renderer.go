@@ -195,8 +195,8 @@ func (r *Renderer) buildAppSet(tenant *noperatorv1alpha1.Tenant, env, server str
 							},
 							map[string]any{
 								"git": map[string]any{
-									keyRepoURL: "{{.repoURL}}",
-									"revision": "{{.revision}}",
+									keyRepoURL: "{{repoURL}}",
+									"revision": "{{revision}}",
 									"directories": []any{
 										map[string]any{"path": fmt.Sprintf("*/overlays/%s", env)},
 									},
@@ -213,8 +213,8 @@ func (r *Renderer) buildAppSet(tenant *noperatorv1alpha1.Tenant, env, server str
 				keySpec: map[string]any{
 					"project": tenant.Name,
 					"source": map[string]any{
-						keyRepoURL:       "{{.repoURL}}",
-						"targetRevision": "{{.revision}}",
+						keyRepoURL:       "{{repoURL}}",
+						"targetRevision": "{{revision}}",
 						"path":           "{{path}}",
 					},
 					"destination": map[string]any{

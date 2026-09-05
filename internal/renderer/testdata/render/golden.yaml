@@ -54,8 +54,8 @@ spec:
       - git:
           directories:
           - path: '*/overlays/dev'
-          repoURL: '{{.repoURL}}'
-          revision: '{{.revision}}'
+          repoURL: '{{repoURL}}'
+          revision: '{{revision}}'
   template:
     metadata:
       name: '{{path[0]}}-dev-norriswu0'
@@ -66,8 +66,8 @@ spec:
       project: norriswu0
       source:
         path: '{{path}}'
-        repoURL: '{{.repoURL}}'
-        targetRevision: '{{.revision}}'
+        repoURL: '{{repoURL}}'
+        targetRevision: '{{revision}}'
       syncPolicy:
         automated:
           prune: true
@@ -91,8 +91,8 @@ spec:
       - git:
           directories:
           - path: '*/overlays/prod'
-          repoURL: '{{.repoURL}}'
-          revision: '{{.revision}}'
+          repoURL: '{{repoURL}}'
+          revision: '{{revision}}'
   template:
     metadata:
       name: '{{path[0]}}-prod-norriswu0'
@@ -103,8 +103,8 @@ spec:
       project: norriswu0
       source:
         path: '{{path}}'
-        repoURL: '{{.repoURL}}'
-        targetRevision: '{{.revision}}'
+        repoURL: '{{repoURL}}'
+        targetRevision: '{{revision}}'
       syncPolicy:
         automated:
           prune: true
