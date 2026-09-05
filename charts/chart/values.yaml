@@ -148,34 +148,8 @@ registry:
     - { group: "", kind: Service }
     - { group: "", kind: PersistentVolumeClaim }
   ## Opt-in extensions, each a list of { group, kind } allowlist entries.
-  extensions:
-    networking:
-      - { group: networking.k8s.io, kind: Ingress }
-    externalSecrets:
-      - { group: external-secrets.io, kind: SecretStore }
-      - { group: external-secrets.io, kind: ExternalSecret }
-    sealedSecrets:
-      - { group: bitnami.com, kind: SealedSecret }
-    certManager:
-      - { group: cert-manager.io, kind: Issuer }
-      - { group: cert-manager.io, kind: Certificate }
-    gatewayApi:
-      - { group: gateway.networking.k8s.io, kind: Gateway }
-      - { group: gateway.networking.k8s.io, kind: HTTPRoute }
-      - { group: gateway.kgateway.dev, kind: GatewayParameters }
-    cnpg:
-      - { group: postgresql.cnpg.io, kind: Cluster }
-      - { group: postgresql.cnpg.io, kind: Database }
-      - { group: postgresql.cnpg.io, kind: DatabaseRole }
-      - { group: postgresql.cnpg.io, kind: ScheduledBackup }
-      - { group: barmancloud.cnpg.io, kind: ObjectStore }
-      - { group: nori-cloud.io, kind: PostgresBackup }
-    upboundAws:
-      - { group: aws.m.upbound.io, kind: ProviderConfig }
-    batch:
-      - { group: batch, kind: Job }
-    configMap:
-      - { group: "", kind: ConfigMap }
+  ## Empty by default; the wrapper chart extends this for the target cluster.
+  extensions: {}
 
 ## ServiceAccount configuration
 ##
