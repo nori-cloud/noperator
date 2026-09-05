@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: norriswu0-dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: norriswu0-prod
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: norriswu0
+  namespace: argocd
+spec:
+  description: norriswu0 tenant
+  destinations:
+  - namespace: norriswu0-dev
+    server: https://kubernetes.default.svc
+  - namespace: norriswu0-prod
+    server: https://kubernetes.default.svc
+  namespaceResourceWhitelist:
+  - group: ""
+    kind: ServiceAccount
+  - group: ""
+    kind: Secret
+  - group: apps
+    kind: Deployment
+  - group: postgresql.cnpg.io
+    kind: Cluster
+  - group: cert-manager.io
+    kind: Issuer
+  - group: example.com
+    kind: Foo
+  orphanedResources:
+    warn: true
+  sourceRepos:
+  - https://github.com/norriswu0/apps.git
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: norriswu0-dev
+  namespace: argocd
+spec:
+  generators:
+  - matrix:
+      generators:
+      - list:
+          elements:
+          - repoURL: https://github.com/norriswu0/apps.git
+            revision: main
+      - git:
+          directories:
+          - path: '*/overlays/dev'
+          repoURL: '{{.repoURL}}'
+          revision: '{{.revision}}'
+  template:
+    metadata:
+      name: '{{path[0]}}-dev-norriswu0'
+    spec:
+      destination:
+        namespace: norriswu0-dev
+        server: https://kubernetes.default.svc
+      project: norriswu0
+      source:
+        path: '{{path}}'
+        repoURL: '{{.repoURL}}'
+        targetRevision: '{{.revision}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: norriswu0-prod
+  namespace: argocd
+spec:
+  generators:
+  - matrix:
+      generators:
+      - list:
+          elements:
+          - repoURL: https://github.com/norriswu0/apps.git
+            revision: main
+      - git:
+          directories:
+          - path: '*/overlays/prod'
+          repoURL: '{{.repoURL}}'
+          revision: '{{.revision}}'
+  template:
+    metadata:
+      name: '{{path[0]}}-prod-norriswu0'
+    spec:
+      destination:
+        namespace: norriswu0-prod
+        server: https://kubernetes.default.svc
+      project: norriswu0
+      source:
+        path: '{{path}}'
+        repoURL: '{{.repoURL}}'
+        targetRevision: '{{.revision}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - ServerSideApply=true
+---
+apiVersion: v1
+data:
+  githubAppID: MTIzNDU=
+  githubAppPrivateKey: UFJJVkFURV9LRVk=
+  type: Z2l0
+  url: aHR0cHM6Ly9naXRodWIuY29tL25vcnJpc3d1MC9hcHBzLmdpdA==
+kind: Secret
+metadata:
+  labels:
+    argocd.argoproj.io/secret-type: repository
+  name: norriswu0-repo-0
+  namespace: argocd
+---
+apiVersion: v1
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJnaGNyLmlvIjp7ImF1dGgiOiJkWE5sY2pwd1lYTnoiLCJwYXNzd29yZCI6InBhc3MiLCJ1c2VybmFtZSI6InVzZXIifX19
+kind: Secret
+metadata:
+  name: norriswu0-pull-secret
+  namespace: norriswu0-dev
+type: kubernetes.io/dockerconfigjson
+---
+apiVersion: v1
+imagePullSecrets:
+- name: norriswu0-pull-secret
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: norriswu0-dev
+---
+apiVersion: v1
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJnaGNyLmlvIjp7ImF1dGgiOiJkWE5sY2pwd1lYTnoiLCJwYXNzd29yZCI6InBhc3MiLCJ1c2VybmFtZSI6InVzZXIifX19
+kind: Secret
+metadata:
+  name: norriswu0-pull-secret
+  namespace: norriswu0-prod
+type: kubernetes.io/dockerconfigjson
+---
+apiVersion: v1
+imagePullSecrets:
+- name: norriswu0-pull-secret
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: norriswu0-prod

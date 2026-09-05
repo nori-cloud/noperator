@@ -1,0 +1,26 @@
+apiVersion: noperator.nori-cloud.io/v1alpha1
+kind: Tenant
+metadata:
+  name: norriswu0-test
+  namespace: noperator
+spec:
+  git:
+    - repoURL: https://github.com/norriswu0/apps.git
+      revision: main
+      credentials:
+        type: githubApp
+        githubAppId: "12345"
+        githubAppPrivateKey: $norriswu0-github-app:privateKey
+  environments:
+    - dev
+    - prod
+  extensions:
+    - name: cnpg
+    - name: certManager
+  imagePullSecrets:
+    - registry: ghcr.io
+      username: $ghcr-cred:username
+      password: $ghcr-cred:password
+  extraNamespaceResourceWhitelist:
+    - group: example.com
+      kind: Foo

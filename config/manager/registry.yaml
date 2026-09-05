@@ -1,0 +1,45 @@
+# The extension registry maps extension names (and the reserved "core" entry)
+# to resource allowlist entries. The operator loads this ConfigMap at startup
+# and crashes if it is missing or invalid. The name is prefixed with
+# "noperator-" by kustomize, producing "noperator-extension-registry".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extension-registry
+data:
+  registry.yaml: |
+    core:
+      - { group: "", kind: ServiceAccount }
+      - { group: "", kind: Secret }
+      - { group: "", kind: Pod }
+      - { group: apps, kind: ReplicaSet }
+      - { group: apps, kind: Deployment }
+      - { group: "", kind: Service }
+      - { group: "", kind: PersistentVolumeClaim }
+    networking:
+      - { group: networking.k8s.io, kind: Ingress }
+    externalSecrets:
+      - { group: external-secrets.io, kind: SecretStore }
+      - { group: external-secrets.io, kind: ExternalSecret }
+    sealedSecrets:
+      - { group: bitnami.com, kind: SealedSecret }
+    certManager:
+      - { group: cert-manager.io, kind: Issuer }
+      - { group: cert-manager.io, kind: Certificate }
+    gatewayApi:
+      - { group: gateway.networking.k8s.io, kind: Gateway }
+      - { group: gateway.networking.k8s.io, kind: HTTPRoute }
+      - { group: gateway.kgateway.dev, kind: GatewayParameters }
+    cnpg:
+      - { group: postgresql.cnpg.io, kind: Cluster }
+      - { group: postgresql.cnpg.io, kind: Database }
+      - { group: postgresql.cnpg.io, kind: DatabaseRole }
+      - { group: postgresql.cnpg.io, kind: ScheduledBackup }
+      - { group: barmancloud.cnpg.io, kind: ObjectStore }
+      - { group: nori-cloud.io, kind: PostgresBackup }
+    upboundAws:
+      - { group: aws.m.upbound.io, kind: ProviderConfig }
+    batch:
+      - { group: batch, kind: Job }
+    configMap:
+      - { group: "", kind: ConfigMap }

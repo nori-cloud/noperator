@@ -1,0 +1,690 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+    control-plane: controller-manager
+  name: noperator-system
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: tenants.noperator.nori-cloud.io
+spec:
+  group: noperator.nori-cloud.io
+  names:
+    kind: Tenant
+    listKind: TenantList
+    plural: tenants
+    singular: tenant
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Tenant is the Schema for the tenants API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of Tenant
+            properties:
+              destination:
+                description: destination defines the Argo CD destination for the tenant's
+                  applications.
+                properties:
+                  server:
+                    default: https://kubernetes.default.svc
+                    description: server is the cluster API server URL.
+                    type: string
+                type: object
+              environments:
+                description: |-
+                  environments is the list of environment names. Each environment produces a
+                  namespace {tenant}-{env} and one ApplicationSet.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              extensions:
+                description: |-
+                  extensions is the list of extensions enabled for this tenant. Names must
+                  exist in the extension registry ConfigMap.
+                items:
+                  description: ExtensionRef references an extension defined in the
+                    registry ConfigMap.
+                  properties:
+                    name:
+                      description: name is the extension name as defined in the registry
+                        ConfigMap.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              extraNamespaceResourceWhitelist:
+                description: |-
+                  extraNamespaceResourceWhitelist is appended to the tenant's AppProject
+                  namespace resource whitelist, on top of the core allowlist and enabled
+                  extensions.
+                items:
+                  description: ResourceRef identifies a Kubernetes resource by group
+                    and kind.
+                  properties:
+                    group:
+                      description: group is the API group (empty string for core resources).
+                      type: string
+                    kind:
+                      description: kind is the resource kind.
+                      type: string
+                  required:
+                  - group
+                  - kind
+                  type: object
+                type: array
+              git:
+                description: git is the list of Git repositories that make up the
+                  tenant's GitOps sources.
+                items:
+                  description: GitRepo is a single Git source for a tenant.
+                  properties:
+                    credentials:
+                      description: credentials optionally configures repository access
+                        credentials.
+                      properties:
+                        githubAppId:
+                          description: |-
+                            githubAppId is the GitHub App ID. Accepts an inline value or a
+                            $secretName:key reference.
+                          type: string
+                        githubAppPrivateKey:
+                          description: |-
+                            githubAppPrivateKey is the GitHub App private key. Accepts an inline value
+                            or a $secretName:key reference.
+                          type: string
+                        password:
+                          description: |-
+                            password is the repository token/password (PAT flavor). Accepts an inline
+                            value or a $secretName:key reference.
+                          type: string
+                        type:
+                          description: type is the credential flavor.
+                          enum:
+                          - githubApp
+                          - pat
+                          type: string
+                        username:
+                          description: username is the repository username (PAT flavor).
+                          type: string
+                      required:
+                      - type
+                      type: object
+                    repoURL:
+                      description: repoURL is the Git repository URL (e.g. https://github.com/org/apps.git).
+                      type: string
+                    revision:
+                      default: main
+                      description: revision is the Git revision to track.
+                      type: string
+                  required:
+                  - repoURL
+                  type: object
+                minItems: 1
+                type: array
+              imagePullSecrets:
+                description: |-
+                  imagePullSecrets is the list of container registries whose credentials are
+                  bundled into a single dockerconfigjson secret attached to the default
+                  ServiceAccount of each tenant namespace.
+                items:
+                  description: ImagePullSecret configures credentials for a container
+                    registry.
+                  properties:
+                    password:
+                      description: password accepts an inline value or a $secretName:key
+                        reference.
+                      type: string
+                    registry:
+                      description: registry is the container registry host (e.g. ghcr.io).
+                      type: string
+                    username:
+                      description: username accepts an inline value or a $secretName:key
+                        reference.
+                      type: string
+                  required:
+                  - password
+                  - registry
+                  - username
+                  type: object
+                type: array
+            required:
+            - environments
+            - git
+            type: object
+          status:
+            description: status defines the observed state of Tenant
+            properties:
+              conditions:
+                description: |-
+                  conditions represent the current state of the Tenant resource.
+                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
+
+                  Standard condition types include:
+                  - "Ready": the tenant is fully reconciled
+                  - "Degraded": the tenant failed to reach its desired state
+
+                  The status of each condition is one of True, False, or Unknown.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: observedGeneration is the generation observed by the
+                  controller.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+  name: noperator-controller-manager
+  namespace: noperator-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+  name: noperator-leader-election-role
+  namespace: noperator-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: noperator-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - applicationsets
+  - appprojects
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: noperator-metrics-auth-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: noperator-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+  name: noperator-tenant-admin-role
+rules:
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants
+  verbs:
+  - '*'
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+  name: noperator-tenant-editor-role
+rules:
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+  name: noperator-tenant-viewer-role
+rules:
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - noperator.nori-cloud.io
+  resources:
+  - tenants/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+  name: noperator-leader-election-rolebinding
+  namespace: noperator-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: noperator-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: noperator-controller-manager
+  namespace: noperator-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+  name: noperator-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: noperator-manager-role
+subjects:
+- kind: ServiceAccount
+  name: noperator-controller-manager
+  namespace: noperator-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: noperator-metrics-auth-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: noperator-metrics-auth-role
+subjects:
+- kind: ServiceAccount
+  name: noperator-controller-manager
+  namespace: noperator-system
+---
+apiVersion: v1
+data:
+  registry.yaml: |
+    core:
+      - { group: "", kind: ServiceAccount }
+      - { group: "", kind: Secret }
+      - { group: "", kind: Pod }
+      - { group: apps, kind: ReplicaSet }
+      - { group: apps, kind: Deployment }
+      - { group: "", kind: Service }
+      - { group: "", kind: PersistentVolumeClaim }
+    networking:
+      - { group: networking.k8s.io, kind: Ingress }
+    externalSecrets:
+      - { group: external-secrets.io, kind: SecretStore }
+      - { group: external-secrets.io, kind: ExternalSecret }
+    sealedSecrets:
+      - { group: bitnami.com, kind: SealedSecret }
+    certManager:
+      - { group: cert-manager.io, kind: Issuer }
+      - { group: cert-manager.io, kind: Certificate }
+    gatewayApi:
+      - { group: gateway.networking.k8s.io, kind: Gateway }
+      - { group: gateway.networking.k8s.io, kind: HTTPRoute }
+      - { group: gateway.kgateway.dev, kind: GatewayParameters }
+    cnpg:
+      - { group: postgresql.cnpg.io, kind: Cluster }
+      - { group: postgresql.cnpg.io, kind: Database }
+      - { group: postgresql.cnpg.io, kind: DatabaseRole }
+      - { group: postgresql.cnpg.io, kind: ScheduledBackup }
+      - { group: barmancloud.cnpg.io, kind: ObjectStore }
+      - { group: nori-cloud.io, kind: PostgresBackup }
+    upboundAws:
+      - { group: aws.m.upbound.io, kind: ProviderConfig }
+    batch:
+      - { group: batch, kind: Job }
+    configMap:
+      - { group: "", kind: ConfigMap }
+kind: ConfigMap
+metadata:
+  name: noperator-extension-registry
+  namespace: noperator-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+    control-plane: controller-manager
+  name: noperator-controller-manager-metrics-service
+  namespace: noperator-system
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: noperator
+    control-plane: controller-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: noperator
+    control-plane: controller-manager
+  name: noperator-controller-manager
+  namespace: noperator-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: noperator
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: noperator
+        control-plane: controller-manager
+    spec:
+      containers:
+      - args:
+        - --metrics-bind-address=:8443
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: ghcr.io/nori-cloud/noperator:latest
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts: []
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: noperator-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes: []

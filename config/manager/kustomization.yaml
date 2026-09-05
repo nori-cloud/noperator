@@ -1,0 +1,9 @@
+resources:
+- manager.yaml
+- registry.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: controller
+  newName: ghcr.io/nori-cloud/noperator
+  newTag: latest

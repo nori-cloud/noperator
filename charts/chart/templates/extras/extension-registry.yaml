@@ -1,0 +1,14 @@
+{{- if .Values.registry }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "noperator.resourceName" (dict "suffix" "extension-registry" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+data:
+  registry.yaml: |
+{{- $combined := dict "core" .Values.registry.core }}
+{{- range $name, $refs := .Values.registry.extensions }}
+{{- $_ := set $combined $name $refs }}
+{{- end }}
+{{- toYaml $combined | nindent 4 }}
+{{- end }}
