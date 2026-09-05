@@ -49,7 +49,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=sha,format=long
+            type=raw,value=${{ github.sha }}
             type=raw,value=latest
 
       - name: Build and push image
