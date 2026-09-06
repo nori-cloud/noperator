@@ -1,4 +1,5 @@
 import * as k8s from "@kubernetes/client-node";
+import { logger } from "@/lib/logger";
 
 const TENANT_GROUP = "noperator.nori-cloud.io";
 const TENANT_VERSION = "v1alpha1";
@@ -17,6 +18,11 @@ if (process.env.KUBERNETES_SERVICE_HOST) {
 const coreApi = kc.makeApiClient(k8s.CoreV1Api);
 const eventsApi = kc.makeApiClient(k8s.EventsV1Api);
 const customApi = kc.makeApiClient(k8s.CustomObjectsApi);
+
+logger.info(
+  { inCluster: Boolean(process.env.KUBERNETES_SERVICE_HOST) },
+  "Initialized Kubernetes client",
+);
 
 export type Manifest = Record<string, unknown>;
 
@@ -156,9 +162,12 @@ export async function listTenants(): Promise<TenantSummary[]> {
     plural: TENANT_PLURAL,
   })) as { items?: RawTenant[] };
 
-  return (body.items ?? [])
+  const tenants = (body.items ?? [])
     .map(summarizeTenant)
     .sort((a, b) => a.name.localeCompare(b.name));
+
+  logger.info({ count: tenants.length }, "Listed tenants");
+  return tenants;
 }
 
 export async function getTenantDetail(name: string): Promise<TenantDetail> {
@@ -207,6 +216,8 @@ export async function getTenantDetail(name: string): Promise<TenantDetail> {
 
   const appProjectsResolved = toChildResources(appProjectItems, argocdNs);
   const appSetsResolved = toChildResources(appSetItems, argocdNs);
+
+  logger.info({ tenant: name }, "Fetched tenant detail");
 
   return {
     ...summarizeTenant(raw),

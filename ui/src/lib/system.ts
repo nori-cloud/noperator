@@ -2,6 +2,7 @@ export const Env = {
   System: {
     IsDev: process.env.NODE_ENV === "development",
     NodeEnv: process.env.NODE_ENV ?? "development",
+    LogLevel: process.env.LOG_LEVEL ?? "info",
   },
   Auth: {
     BetterAuthUrl:
