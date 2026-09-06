@@ -57,26 +57,17 @@ const (
 
 	// managedByValue is the value of managedByLabel for noperator-managed resources.
 	managedByValue = "noperator"
-
-	// trackingIDAnnotation marks a resource as owned by a Tenant, in Argo CD's
-	// resource-tracking annotation format.
-	trackingIDAnnotation = "argocd.argoproj.io/tracking-id"
-
-	// tenantGroup and tenantKind identify the Tenant CRD for the tracking id.
-	tenantGroup = "noperator.nori-cloud.io"
-	tenantKind  = "Tenant"
 )
 
 const (
-	keyAPIVersion  = "apiVersion"
-	keyKind        = "kind"
-	keyMetadata    = "metadata"
-	keyName        = "name"
-	keyNamespace   = "namespace"
-	keyLabels      = "labels"
-	keyAnnotations = "annotations"
-	keySpec        = "spec"
-	keyRepoURL     = "repoURL"
+	keyAPIVersion = "apiVersion"
+	keyKind       = "kind"
+	keyMetadata   = "metadata"
+	keyName       = "name"
+	keyNamespace  = "namespace"
+	keyLabels     = "labels"
+	keySpec       = "spec"
+	keyRepoURL    = "repoURL"
 )
 
 // tenantLabels returns the labels marking a resource as owned by a Tenant.
@@ -93,27 +84,6 @@ func tenantLabelAny(tenantName string) map[string]any {
 	return map[string]any{
 		tenantLabel:    tenantName,
 		managedByLabel: managedByValue,
-	}
-}
-
-// tenantTrackingID builds the Argo CD tracking-id that records a Tenant as the
-// owner of a resource: <name>:<group>/<kind>:<namespace>/<name>.
-func tenantTrackingID(tenant *noperatorv1alpha1.Tenant) string {
-	return fmt.Sprintf("%s:%s/%s:%s/%s", tenant.Name, tenantGroup, tenantKind, tenant.Namespace, tenant.Name)
-}
-
-// tenantAnnotations returns the annotations marking a resource as owned by a Tenant.
-func tenantAnnotations(tenant *noperatorv1alpha1.Tenant) map[string]string {
-	return map[string]string{
-		trackingIDAnnotation: tenantTrackingID(tenant),
-	}
-}
-
-// tenantAnnotationAny returns tenantAnnotations as a map[string]any for
-// unstructured objects, whose deepcopy cannot handle a concrete map[string]string.
-func tenantAnnotationAny(tenant *noperatorv1alpha1.Tenant) map[string]any {
-	return map[string]any{
-		trackingIDAnnotation: tenantTrackingID(tenant),
 	}
 }
 
@@ -182,9 +152,8 @@ func (r *Renderer) buildNamespace(tenant *noperatorv1alpha1.Tenant, env string) 
 		keyAPIVersion: "v1",
 		keyKind:       "Namespace",
 		keyMetadata: map[string]any{
-			keyName:        NamespaceName(tenant.Name, env),
-			keyLabels:      tenantLabelAny(tenant.Name),
-			keyAnnotations: tenantAnnotationAny(tenant),
+			keyName:   NamespaceName(tenant.Name, env),
+			keyLabels: tenantLabelAny(tenant.Name),
 		},
 	}}
 }
@@ -215,10 +184,9 @@ func (r *Renderer) buildAppProject(tenant *noperatorv1alpha1.Tenant, allowlist [
 		keyAPIVersion: argocdAPIVersion,
 		keyKind:       "AppProject",
 		keyMetadata: map[string]any{
-			keyName:        tenant.Name,
-			keyNamespace:   r.ArgoCDNamespace,
-			keyLabels:      tenantLabelAny(tenant.Name),
-			keyAnnotations: tenantAnnotationAny(tenant),
+			keyName:      tenant.Name,
+			keyNamespace: r.ArgoCDNamespace,
+			keyLabels:    tenantLabelAny(tenant.Name),
 		},
 		keySpec: map[string]any{
 			"description":                fmt.Sprintf("%s tenant", tenant.Name),
@@ -243,10 +211,9 @@ func (r *Renderer) buildAppSet(tenant *noperatorv1alpha1.Tenant, env, server str
 		keyAPIVersion: argocdAPIVersion,
 		keyKind:       "ApplicationSet",
 		keyMetadata: map[string]any{
-			keyName:        fmt.Sprintf("%s-%s", tenant.Name, env),
-			keyNamespace:   r.ArgoCDNamespace,
-			keyLabels:      tenantLabelAny(tenant.Name),
-			keyAnnotations: tenantAnnotationAny(tenant),
+			keyName:      fmt.Sprintf("%s-%s", tenant.Name, env),
+			keyNamespace: r.ArgoCDNamespace,
+			keyLabels:    tenantLabelAny(tenant.Name),
 		},
 		keySpec: map[string]any{
 			"generators": []any{
@@ -340,7 +307,6 @@ func (r *Renderer) buildRepoSecret(ctx context.Context, tenant *noperatorv1alpha
 				tenantLabel:                      tenant.Name,
 				managedByLabel:                   managedByValue,
 			},
-			Annotations: tenantAnnotations(tenant),
 		},
 		Data: data,
 	}, nil
@@ -372,10 +338,9 @@ func (r *Renderer) buildPullSecret(ctx context.Context, tenant *noperatorv1alpha
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        tenant.Name + pullSecretName,
-			Namespace:   NamespaceName(tenant.Name, env),
-			Labels:      tenantLabels(tenant.Name),
-			Annotations: tenantAnnotations(tenant),
+			Name:      tenant.Name + pullSecretName,
+			Namespace: NamespaceName(tenant.Name, env),
+			Labels:    tenantLabels(tenant.Name),
 		},
 		Type: corev1.SecretTypeDockerConfigJson,
 		Data: map[string][]byte{corev1.DockerConfigJsonKey: dockerConfig},
@@ -386,10 +351,9 @@ func (r *Renderer) buildDefaultSA(tenant *noperatorv1alpha1.Tenant, env string) 
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceAccount"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "default",
-			Namespace:   NamespaceName(tenant.Name, env),
-			Labels:      tenantLabels(tenant.Name),
-			Annotations: tenantAnnotations(tenant),
+			Name:      "default",
+			Namespace: NamespaceName(tenant.Name, env),
+			Labels:    tenantLabels(tenant.Name),
 		},
 		ImagePullSecrets: []corev1.LocalObjectReference{{Name: tenant.Name + pullSecretName}},
 	}
