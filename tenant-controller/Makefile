@@ -267,7 +267,7 @@ HELM_NAMESPACE ?= noperator-system
 ## Name of the Helm release
 HELM_RELEASE ?= noperator
 ## Path to the Helm chart directory
-HELM_CHART_DIR ?= charts/chart
+HELM_CHART_DIR ?= ../charts/chart
 ## Additional arguments to pass to helm commands
 HELM_EXTRA_ARGS ?=
 

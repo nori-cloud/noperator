@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -85,7 +85,7 @@ type TenantReconciler struct {
 
 	// Recorder emits Kubernetes Events describing the resources the controller
 	// creates, syncs, and deletes for a tenant.
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 
 	// RequeueInterval is how often to re-reconcile a tenant to keep its
 	// resources in sync and emit heartbeat "Synced" events.
@@ -102,6 +102,7 @@ type TenantReconciler struct {
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile moves a Tenant towards its desired state by rendering and applying
 // the derived Argo CD resources, and cleans them up on deletion.
@@ -199,7 +200,7 @@ func (r *TenantReconciler) emitEvent(tenant *noperatorv1alpha1.Tenant, reason, m
 	if r.Recorder == nil {
 		return
 	}
-	r.Recorder.Event(tenant, corev1.EventTypeNormal, reason, fmt.Sprintf(messageFormat, args...))
+	r.Recorder.Eventf(tenant, nil, corev1.EventTypeNormal, reason, "", messageFormat, args...)
 }
 
 // finalize removes the Argo CD resources and tenant namespaces. The namespaces

@@ -1,6 +1,15 @@
 # noperator - AI Agent Guide
 
+## Monorepo layout
+
+- `tenant-controller/` — the Go operator. All `make` targets and `kubebuilder`
+  commands below run from inside this directory.
+- `charts/chart/` — the Helm chart (deployed via OCI).
+- `ui/` — (planned) the web UI.
+
 ## Project Structure
+
+The Go module lives in `tenant-controller/`; paths below are relative to it.
 
 **Single-group layout (default):**
 ```

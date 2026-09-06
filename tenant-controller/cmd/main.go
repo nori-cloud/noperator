@@ -212,7 +212,7 @@ func main() {
 		Scheme:          mgr.GetScheme(),
 		Registry:        registry,
 		ArgoCDNamespace: renderer.DefaultArgoCDNamespace,
-		Recorder:        mgr.GetEventRecorderFor("noperator"),
+		Recorder:        mgr.GetEventRecorder("noperator"),
 		RequeueInterval: requeueInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "tenant")

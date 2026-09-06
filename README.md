@@ -2,7 +2,17 @@
 
 An operator that bootstraps Argo CD resources from a `Tenant` CR.
 
-## Description
+## Layout
+
+Monorepo:
+
+- `tenant-controller/` — the Go operator (kubebuilder / controller-runtime).
+- `charts/chart/` — the Helm chart (distributed as an OCI artifact).
+- `ui/` — (planned) the web UI.
+
+All `make` targets run from `tenant-controller/`.
+
+## What it does
 
 `noperator` watches `Tenant` resources (group `noperator.nori-cloud.io`) and
 reconciles them into a standard set of Argo CD objects:
@@ -17,102 +27,21 @@ The resource allowlist is data-driven: the operator loads an extension registry
 ConfigMap (`noperator-extension-registry`) at startup and fails closed if it is
 missing or invalid.
 
-## Getting Started
-
-### Prerequisites
-- go version v1.24.6+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
-
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+## Build & test
 
 ```sh
-make docker-build docker-push IMG=<some-registry>/noperator:tag
+cd tenant-controller
+make test    # unit tests
+make lint    # golangci-lint
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+## Deploy
 
-**Install the CRDs into the cluster:**
-
-```sh
-make install
-```
-
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
-
-```sh
-make deploy IMG=<some-registry>/noperator:tag
-```
-
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
-
-```sh
-kubectl apply -k config/samples/
-```
-
->**NOTE**: Ensure that the samples has default values to test it out.
-
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k config/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/noperator:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/noperator/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-The chart lives in `charts/chart/` and installs the CRDs, the controller, and
+The Helm chart is the release path. It installs the CRDs, the controller, and
 the extension registry ConfigMap.
 
-Deploy directly (build/push the image first, or point at an existing image):
-
 ```sh
+cd tenant-controller
 make helm-deploy IMG=ghcr.io/nori-cloud/noperator:latest
 ```
 
@@ -130,26 +59,11 @@ Customize the extension registry via `--set` on `registry.core` and
 `registry.extensions`, or edit the `noperator-extension-registry` ConfigMap
 after install.
 
-Publish the chart as an OCI artifact (after `docker login ghcr.io`):
+## CI/CD
 
-```sh
-helm package charts/chart --destination dist
-helm push dist/noperator-*.tgz oci://ghcr.io/nori-cloud/charts
-```
-
-### CI/CD
-
-- `.github/workflows/test.yml`, `lint.yml`, `test-e2e.yml` run on push/PR.
-- `.github/workflows/release.yml` builds and pushes the image to GHCR, packages
-  and pushes the Helm chart, and attaches `dist/install.yaml` + the chart to a
-  GitHub release on tag push (`v*`).
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+- `.github/workflows/release.yml` runs on push to `main`: builds and pushes the
+  controller image to GHCR, then packages and pushes the Helm chart as an OCI
+  artifact (`oci://ghcr.io/nori-cloud/charts`).
 
 ## License
 
@@ -166,4 +80,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
