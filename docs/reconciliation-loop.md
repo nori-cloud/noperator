@@ -22,7 +22,7 @@ flowchart TD
     H -- unknown extension --> X1[Ready=False<br/>UnknownExtension]
     H -- ok --> I{Resolve secret refs}
     I -- missing/invalid --> X2[Ready=False<br/>ReconcileError]
-    I -- ok --> J[Return []client.Object]
+    I -- ok --> J["Return []client.Object"]
 
     J --> K[for each object: apply]
     K --> L{Object exists?}
