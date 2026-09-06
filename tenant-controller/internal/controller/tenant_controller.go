@@ -225,7 +225,7 @@ func (r *TenantReconciler) emitEvent(tenant *noperatorv1alpha1.Tenant, reason, m
 	if r.Recorder == nil {
 		return
 	}
-	r.Recorder.Eventf(tenant, nil, corev1.EventTypeNormal, reason, "", messageFormat, args...)
+	r.Recorder.Eventf(tenant, nil, corev1.EventTypeNormal, reason, reason, messageFormat, args...)
 }
 
 // finalize removes the Argo CD resources and tenant namespaces. The namespaces
