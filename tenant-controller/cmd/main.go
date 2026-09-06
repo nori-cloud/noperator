@@ -67,6 +67,7 @@ func main() {
 	var registryNamespace string
 	var registryName string
 	var requeueIntervalFlag string
+	var finalizeRetryIntervalFlag string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&registryNamespace, "registry-namespace", envOr("POD_NAMESPACE", "noperator-system"),
 		"The namespace containing the extension registry ConfigMap.")
@@ -74,6 +75,8 @@ func main() {
 		"The name of the extension registry ConfigMap.")
 	flag.StringVar(&requeueIntervalFlag, "requeue-interval", "5m",
 		"How often to re-reconcile a tenant to keep its resources in sync (e.g. 30s, 5m, 1h).")
+	flag.StringVar(&finalizeRetryIntervalFlag, "finalize-retry-interval", "30s",
+		"How often to retry tenant finalization while child resources are pending deletion (e.g. 10s, 30s, 1m).")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -207,13 +210,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	finalizeRetryInterval, err := time.ParseDuration(finalizeRetryIntervalFlag)
+	if err != nil || finalizeRetryInterval <= 0 {
+		setupLog.Error(err, "Invalid finalize retry interval", "finalize-retry-interval", finalizeRetryIntervalFlag)
+		os.Exit(1)
+	}
+
 	if err := (&controller.TenantReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		Registry:        registry,
-		ArgoCDNamespace: renderer.DefaultArgoCDNamespace,
-		Recorder:        mgr.GetEventRecorder("noperator"),
-		RequeueInterval: requeueInterval,
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		Registry:              registry,
+		ArgoCDNamespace:       renderer.DefaultArgoCDNamespace,
+		Recorder:              mgr.GetEventRecorder("noperator"),
+		RequeueInterval:       requeueInterval,
+		FinalizeRetryInterval: finalizeRetryInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "tenant")
 		os.Exit(1)

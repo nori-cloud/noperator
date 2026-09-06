@@ -177,6 +177,12 @@ spec:
                   - username
                   type: object
                 type: array
+              preserveResourcesOnDeletion:
+                description: |-
+                  preserveResourcesOnDeletion, when true, skips deleting the resources
+                  generated from this tenant (namespaces, AppProject, ApplicationSets, and
+                  repository credentials) when the tenant is deleted.
+                type: boolean
             required:
             - environments
             - git

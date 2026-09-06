@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -68,6 +69,14 @@ const (
 	// EventReasonDeleted is emitted when a child resource is deleted during
 	// tenant finalization.
 	EventReasonDeleted = "Deleted"
+
+	// EventReasonFinalizing is emitted while tenant finalization is still
+	// waiting for child resources to be deleted.
+	EventReasonFinalizing = "Finalizing"
+
+	// EventReasonPreserved is emitted when tenant deletion skips cleanup because
+	// preserveResourcesOnDeletion is enabled.
+	EventReasonPreserved = "Preserved"
 )
 
 // TenantReconciler reconciles a Tenant object.
@@ -90,6 +99,10 @@ type TenantReconciler struct {
 	// RequeueInterval is how often to re-reconcile a tenant to keep its
 	// resources in sync and emit heartbeat "Synced" events.
 	RequeueInterval time.Duration
+
+	// FinalizeRetryInterval is how often to retry tenant finalization while
+	// child resources are still pending deletion.
+	FinalizeRetryInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=noperator.nori-cloud.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
@@ -118,9 +131,21 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if !controllerutil.ContainsFinalizer(tenant, tenantFinalizer) {
 			return ctrl.Result{}, nil
 		}
+
+		if tenant.Spec.PreserveResourcesOnDeletion {
+			log.Info("Preserving tenant resources on deletion", "tenant", tenant.Name)
+			r.emitEvent(tenant, EventReasonPreserved, "Preserved resources on deletion")
+			controllerutil.RemoveFinalizer(tenant, tenantFinalizer)
+			return ctrl.Result{}, r.Update(ctx, tenant)
+		}
+
 		log.Info("Deleting tenant resources", "tenant", tenant.Name)
-		if err := r.finalize(ctx, tenant); err != nil {
+		done, err := r.finalize(ctx, tenant)
+		if err != nil {
 			return ctrl.Result{}, err
+		}
+		if !done {
+			return ctrl.Result{RequeueAfter: r.FinalizeRetryInterval}, nil
 		}
 		controllerutil.RemoveFinalizer(tenant, tenantFinalizer)
 		return ctrl.Result{}, r.Update(ctx, tenant)
@@ -204,19 +229,23 @@ func (r *TenantReconciler) emitEvent(tenant *noperatorv1alpha1.Tenant, reason, m
 }
 
 // finalize removes the Argo CD resources and tenant namespaces. The namespaces
-// sit in Terminating until Argo CD prunes the workloads inside them.
-func (r *TenantReconciler) finalize(ctx context.Context, tenant *noperatorv1alpha1.Tenant) error {
+// sit in Terminating until Argo CD prunes the workloads inside them. It returns
+// done=false while any child resource is still pending deletion, so the caller
+// keeps the finalizer and retries.
+func (r *TenantReconciler) finalize(ctx context.Context, tenant *noperatorv1alpha1.Tenant) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	if err := r.deleteResource(ctx, tenant, newArgocdObject("AppProject", tenant.Name)); err != nil {
-		return err
-	}
-
+	// Delete ApplicationSets first so Argo CD prunes the workloads before the
+	// AppProject and namespaces are torn down.
 	for _, env := range tenant.Spec.Environments {
 		name := fmt.Sprintf("%s-%s", tenant.Name, env)
 		if err := r.deleteResource(ctx, tenant, newArgocdObject("ApplicationSet", name)); err != nil {
-			return err
+			return false, err
 		}
+	}
+
+	if err := r.deleteResource(ctx, tenant, newArgocdObject("AppProject", tenant.Name)); err != nil {
+		return false, err
 	}
 
 	for i, repo := range tenant.Spec.Git {
@@ -228,19 +257,95 @@ func (r *TenantReconciler) finalize(ctx context.Context, tenant *noperatorv1alph
 			Namespace: r.ArgoCDNamespace,
 		}}
 		if err := r.deleteResource(ctx, tenant, secret); err != nil {
-			return err
+			return false, err
 		}
 	}
 
 	for _, env := range tenant.Spec.Environments {
 		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: renderer.NamespaceName(tenant.Name, env)}}
 		if err := r.deleteResource(ctx, tenant, ns); err != nil {
-			return err
+			return false, err
 		}
 	}
 
+	remaining, err := r.remainingResources(ctx, tenant)
+	if err != nil {
+		return false, err
+	}
+	if len(remaining) > 0 {
+		log.Info("Waiting for tenant resources to be deleted", "tenant", tenant.Name, "remaining", remaining)
+		r.emitEvent(tenant, EventReasonFinalizing, "Waiting for %s", strings.Join(remaining, ", "))
+		return false, nil
+	}
+
 	log.Info("Deleted tenant resources", "tenant", tenant.Name)
-	return nil
+	return true, nil
+}
+
+// remainingResources returns the "kind/name" of child resources still present
+// in the cluster, in deletion order. An empty slice means cleanup is complete.
+func (r *TenantReconciler) remainingResources(ctx context.Context, tenant *noperatorv1alpha1.Tenant) ([]string, error) {
+	remaining := make([]string, 0)
+
+	for _, env := range tenant.Spec.Environments {
+		name := fmt.Sprintf("%s-%s", tenant.Name, env)
+		present, err := r.exists(ctx, newArgocdObject("ApplicationSet", name))
+		if err != nil {
+			return nil, err
+		}
+		if present {
+			remaining = append(remaining, fmt.Sprintf("ApplicationSet/%s", name))
+		}
+	}
+
+	present, err := r.exists(ctx, newArgocdObject("AppProject", tenant.Name))
+	if err != nil {
+		return nil, err
+	}
+	if present {
+		remaining = append(remaining, fmt.Sprintf("AppProject/%s", tenant.Name))
+	}
+
+	for i, repo := range tenant.Spec.Git {
+		if repo.Credentials == nil {
+			continue
+		}
+		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-repo-%d", tenant.Name, i),
+			Namespace: r.ArgoCDNamespace,
+		}}
+		present, err := r.exists(ctx, secret)
+		if err != nil {
+			return nil, err
+		}
+		if present {
+			remaining = append(remaining, fmt.Sprintf("Secret/%s", secret.Name))
+		}
+	}
+
+	for _, env := range tenant.Spec.Environments {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: renderer.NamespaceName(tenant.Name, env)}}
+		present, err := r.exists(ctx, ns)
+		if err != nil {
+			return nil, err
+		}
+		if present {
+			remaining = append(remaining, fmt.Sprintf("Namespace/%s", ns.Name))
+		}
+	}
+
+	return remaining, nil
+}
+
+// exists reports whether the object is still present in the cluster.
+func (r *TenantReconciler) exists(ctx context.Context, obj client.Object) (bool, error) {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // deleteResource deletes the given object and records a "Deleted" event and log

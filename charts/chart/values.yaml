@@ -32,6 +32,11 @@ manager:
   ##
   requeueInterval: "5m"
 
+  ## How often to retry tenant finalization while child resources are still
+  ## pending deletion (e.g. 10s, 30s, 1m).
+  ##
+  finalizeRetryInterval: "30s"
+
   ## Environment variables
   ##
   env:

@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	noperatorv1alpha1 "github.com/nori-cloud/noperator/api/v1alpha1"
 	"github.com/nori-cloud/noperator/internal/extensions"
@@ -34,6 +35,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -68,7 +71,7 @@ type fixture struct {
 	request    reconcile.Request
 }
 
-func setupFixture(t *testing.T, mutate func(*noperatorv1alpha1.Tenant)) *fixture {
+func setupFixture(t *testing.T, mutate func(*noperatorv1alpha1.Tenant), interceptors ...interceptor.Funcs) *fixture {
 	t.Helper()
 
 	tenant := &noperatorv1alpha1.Tenant{
@@ -102,11 +105,14 @@ func setupFixture(t *testing.T, mutate func(*noperatorv1alpha1.Tenant)) *fixture
 		Data:       map[string][]byte{"privateKey": []byte("PRIVATE_KEY")},
 	}
 
-	c := fake.NewClientBuilder().
+	builder := fake.NewClientBuilder().
 		WithScheme(testScheme()).
 		WithStatusSubresource(&noperatorv1alpha1.Tenant{}).
-		WithObjects(tenant, cm, ghApp).
-		Build()
+		WithObjects(tenant, cm, ghApp)
+	if len(interceptors) > 0 {
+		builder = builder.WithInterceptorFuncs(interceptors[0])
+	}
+	c := builder.Build()
 
 	registry, err := extensions.Load(context.Background(), c, "noperator-system", extensions.DefaultConfigMapName)
 	if err != nil {
@@ -244,7 +250,88 @@ func TestFinalizerDeletion(t *testing.T) {
 
 	// namespace should be marked for deletion
 	ns := &corev1.Namespace{}
-	if err := f.client.Get(context.Background(), client.ObjectKey{Name: "norriswu0-dev"}, ns); err != nil && !apierrors.IsNotFound(err) {
+	if err := f.client.Get(context.Background(), client.ObjectKey{Name: "norriswu0-" + envDev}, ns); err != nil && !apierrors.IsNotFound(err) {
 		t.Fatalf("expected namespace deleted or deleting, got %v", err)
+	}
+}
+
+func TestFinalizerBlocksUntilChildrenGone(t *testing.T) {
+	block := true
+	f := setupFixture(t, nil, interceptor.Funcs{
+		Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+			if block {
+				if _, ok := obj.(*corev1.Namespace); ok {
+					return nil // namespaces never finish deleting
+				}
+			}
+			return c.Delete(ctx, obj, opts...)
+		},
+	})
+	f.reconciler.FinalizeRetryInterval = time.Second
+
+	mustReconcile(t, f)
+
+	// simulate kubectl delete
+	latest := &noperatorv1alpha1.Tenant{}
+	if err := f.client.Get(context.Background(), f.request.NamespacedName, latest); err != nil {
+		t.Fatalf("get tenant: %v", err)
+	}
+	if err := f.client.Delete(context.Background(), latest); err != nil {
+		t.Fatalf("delete tenant: %v", err)
+	}
+
+	mustReconcile(t, f)
+
+	// finalizer must be retained while namespaces are still present
+	got := &noperatorv1alpha1.Tenant{}
+	if err := f.client.Get(context.Background(), f.request.NamespacedName, got); err != nil {
+		t.Fatalf("get tenant after blocked finalize: %v", err)
+	}
+	if !controllerutil.ContainsFinalizer(got, tenantFinalizer) {
+		t.Fatal("expected finalizer to be retained while namespaces are deleting")
+	}
+	if err := f.client.Get(context.Background(), client.ObjectKey{Name: "norriswu0-" + envDev}, &corev1.Namespace{}); err != nil {
+		t.Fatalf("expected namespace still present: %v", err)
+	}
+
+	// unblock namespace deletion and reconcile again
+	block = false
+	mustReconcile(t, f)
+
+	if err := f.client.Get(context.Background(), f.request.NamespacedName, &noperatorv1alpha1.Tenant{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("expected tenant deleted after cleanup, got %v", err)
+	}
+}
+
+func TestPreserveResourcesOnDeletion(t *testing.T) {
+	f := setupFixture(t, func(tenant *noperatorv1alpha1.Tenant) {
+		tenant.Spec.PreserveResourcesOnDeletion = true
+	})
+
+	mustReconcile(t, f)
+
+	// simulate kubectl delete
+	latest := &noperatorv1alpha1.Tenant{}
+	if err := f.client.Get(context.Background(), f.request.NamespacedName, latest); err != nil {
+		t.Fatalf("get tenant: %v", err)
+	}
+	if err := f.client.Delete(context.Background(), latest); err != nil {
+		t.Fatalf("delete tenant: %v", err)
+	}
+
+	mustReconcile(t, f)
+
+	// children must be preserved
+	if _, err := getArgocd(t, f.client, "AppProject", "norriswu0"); err != nil {
+		t.Fatalf("expected AppProject preserved: %v", err)
+	}
+	ns := &corev1.Namespace{}
+	if err := f.client.Get(context.Background(), client.ObjectKey{Name: "norriswu0-" + envDev}, ns); err != nil {
+		t.Fatalf("expected namespace preserved: %v", err)
+	}
+
+	// tenant must be gone (finalizer removed)
+	if err := f.client.Get(context.Background(), f.request.NamespacedName, &noperatorv1alpha1.Tenant{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("expected tenant deleted after preserve, got %v", err)
 	}
 }

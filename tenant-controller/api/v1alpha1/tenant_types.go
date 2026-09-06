@@ -64,6 +64,12 @@ type TenantSpec struct {
 	// extensions.
 	// +optional
 	ExtraNamespaceResourceWhitelist []ResourceRef `json:"extraNamespaceResourceWhitelist,omitempty"`
+
+	// preserveResourcesOnDeletion, when true, skips deleting the resources
+	// generated from this tenant (namespaces, AppProject, ApplicationSets, and
+	// repository credentials) when the tenant is deleted.
+	// +optional
+	PreserveResourcesOnDeletion bool `json:"preserveResourcesOnDeletion,omitempty"`
 }
 
 // GitRepo is a single Git source for a tenant.
