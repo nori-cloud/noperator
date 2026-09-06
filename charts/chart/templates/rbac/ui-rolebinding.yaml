@@ -1,0 +1,20 @@
+{{- if .Values.ui.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "noperator.name" . }}
+    app.kubernetes.io/component: ui
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "noperator.resourceName" (dict "suffix" "ui-rolebinding" "context" $) }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "noperator.resourceName" (dict "suffix" "ui-role" "context" $) }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "noperator.resourceName" (dict "suffix" "ui" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

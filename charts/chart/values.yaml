@@ -127,6 +127,45 @@ manager:
   #   labels: {}
   #   annotations: {}
 
+## Configure the web UI deployment (optional, read-only dashboard)
+##
+ui:
+  ## Set to true to install the web UI
+  ##
+  enabled: false
+
+  replicas: 1
+
+  image:
+    repository: ghcr.io/nori-cloud/noperator-ui
+    ## Image tag (defaults to Chart.appVersion if not set)
+    ##
+    # tag: ""
+    pullPolicy: IfNotPresent
+
+  ## Name of a Secret whose keys are injected as environment variables on the
+  ## UI pod. Expected keys: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
+  ## BETTER_AUTH_SECRET, BETTER_AUTH_URL.
+  ##
+  envSecret: ""
+
+  ## Container-level security settings
+  ##
+  securityContext: {}
+
+  ## Pod-level security settings
+  ##
+  podSecurityContext: {}
+
+  ## Resource limits and requests
+  ##
+  resources: {}
+
+  ## Service port for the UI
+  ##
+  service:
+    port: 3000
+
 ## RBAC configuration
 ##
 rbac:

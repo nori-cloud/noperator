@@ -61,6 +61,23 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Docker metadata (UI)
+        id: ui-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-ui
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: ui/
+          push: true
+          tags: ${{ steps.ui-meta.outputs.tags }}
+          labels: ${{ steps.ui-meta.outputs.labels }}
+
       - name: Package Helm chart
         run: helm package charts/chart --version "${{ steps.version.outputs.chart_version }}" --app-version "${{ steps.version.outputs.sha }}" --destination dist
 

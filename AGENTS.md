@@ -5,7 +5,7 @@
 - `tenant-controller/` — the Go operator. All `make` targets and `kubebuilder`
   commands below run from inside this directory.
 - `charts/chart/` — the Helm chart (deployed via OCI).
-- `ui/` — (planned) the web UI.
+- `ui/` — the web UI (Next.js read-only dashboard, GitHub SSO).
 
 ## Project Structure
 

@@ -8,7 +8,7 @@ Monorepo:
 
 - `tenant-controller/` — the Go operator (kubebuilder / controller-runtime).
 - `charts/chart/` — the Helm chart (distributed as an OCI artifact).
-- `ui/` — (planned) the web UI.
+- `ui/` — the web UI (Next.js read-only dashboard, GitHub SSO).
 
 All `make` targets run from `tenant-controller/`.
 
