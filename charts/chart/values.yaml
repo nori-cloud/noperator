@@ -152,6 +152,8 @@ registry:
     - { group: apps, kind: Deployment }
     - { group: "", kind: Service }
     - { group: "", kind: PersistentVolumeClaim }
+    - { group: "", kind: ConfigMap }
+    - { group: networking.k8s.io, kind: Ingress }
   ## Opt-in extensions, each a list of { group, kind } allowlist entries.
   ## Empty by default; the wrapper chart extends this for the target cluster.
   extensions: {}
